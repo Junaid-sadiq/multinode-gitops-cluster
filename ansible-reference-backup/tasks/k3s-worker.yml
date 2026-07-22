@@ -1,0 +1,40 @@
+---
+# k3s Worker Node Setup
+- name: Check if k3s agent is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_agent_installed
+
+- name: Read k3s token from local file
+  local_action:
+    module: slurp
+    src: "{{ playbook_dir }}/../.k3s-token"
+  register: k3s_token_content
+  become: no
+
+- name: Install k3s agent on worker node
+  shell: |
+    curl -sfL https://get.k3s.io | K3S_URL=https://192.168.1.10:6443 \
+      K3S_TOKEN="{{ k3s_token_content.content | b64decode | trim }}" \
+      sh -s - agent \
+      --node-ip=192.168.1.11 \
+      --flannel-iface=eth0
+  when: not k3s_agent_installed.stat.exists
+
+- name: Wait for k3s agent to be ready
+  wait_for:
+    timeout: 30
+
+- name: Verify worker node joined cluster (run on master)
+  shell: kubectl get nodes
+  delegate_to: "{{ groups['k8s_master'][0] }}"
+  become_user: ubuntu
+  register: cluster_nodes
+  retries: 5
+  delay: 10
+  until: "'k8s-worker' in cluster_nodes.stdout"
+
+- name: Display cluster nodes
+  debug:
+    var: cluster_nodes.stdout_lines
+  when: cluster_nodes is defined

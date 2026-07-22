@@ -1,0 +1,101 @@
+---
+# Common setup tasks for all nodes
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+
+- name: Install essential packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - vim
+      - htop
+      - net-tools
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - apt-transport-https
+    state: present
+
+- name: Set hostname for master
+  hostname:
+    name: k8s-master
+  when: "'k8s_master' in group_names"
+
+- name: Set hostname for worker
+  hostname:
+    name: k8s-worker
+  when: "'k8s_workers' in group_names"
+
+- name: Update /etc/hosts with cluster nodes
+  blockinfile:
+    path: /etc/hosts
+    block: |
+      192.168.1.10 k8s-master
+      192.168.1.11 k8s-worker
+    marker: "# {mark} ANSIBLE MANAGED K8S CLUSTER HOSTS"
+
+- name: Disable swap (required for Kubernetes)
+  shell: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Remove swap from /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '.*swap.*'
+    state: absent
+
+- name: Load kernel modules for containerd
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Ensure kernel modules load on boot
+  copy:
+    content: |
+      overlay
+      br_netfilter
+    dest: /etc/modules-load.d/k8s.conf
+
+- name: Configure sysctl for Kubernetes networking
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+
+- name: Install Docker dependencies
+  apt:
+    name:
+      - docker.io
+      - docker-compose
+    state: present
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add ubuntu user to docker group
+  user:
+    name: ubuntu
+    groups: docker
+    append: yes

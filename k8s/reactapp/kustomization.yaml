@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: reactapp
+
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+commonLabels:
+  app: reactapp-ui
+
+images:
+  - name: ghcr.io/junaid-sadiq/multinode-gitops-cluster/reactapp
+    newName: ghcr.io/junaid-sadiq/multinode-gitops-cluster/reactapp
+    newTag: latest

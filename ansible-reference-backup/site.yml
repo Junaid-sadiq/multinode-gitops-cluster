@@ -1,0 +1,35 @@
+---
+# Main playbook for setting up k3s cluster with Argo CD
+- name: Setup k3s Cluster Infrastructure
+  hosts: k8s_cluster
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Import common setup tasks
+      import_tasks: tasks/common.yml
+      tags: [common, always]
+
+- name: Setup k3s Master Node
+  hosts: k8s_master
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Import k3s master setup tasks
+      import_tasks: tasks/k3s-master.yml
+      tags: [k3s, master]
+    
+    - name: Import Argo CD setup tasks
+      import_tasks: tasks/argocd.yml
+      tags: [argocd]
+
+- name: Setup k3s Worker Nodes
+  hosts: k8s_workers
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Import k3s worker setup tasks
+      import_tasks: tasks/k3s-worker.yml
+      tags: [k3s, worker]

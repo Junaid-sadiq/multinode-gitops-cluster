@@ -1,0 +1,66 @@
+---
+# Argo CD Setup on Master Node
+- name: Create argocd namespace
+  shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  become_user: ubuntu
+
+- name: Install Argo CD
+  shell: |
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  become_user: ubuntu
+
+- name: Wait for Argo CD pods to be ready
+  shell: kubectl wait --for=condition=Ready pods --all -n argocd --timeout=600s
+  become_user: ubuntu
+  retries: 3
+  delay: 20
+  register: result
+  until: result.rc == 0
+
+- name: Patch Argo CD server service to NodePort
+  shell: |
+    kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "NodePort", "ports": [{"port": 443, "targetPort": 8080, "nodePort": 30008, "name": "https"}]}}'
+  become_user: ubuntu
+
+- name: Get Argo CD admin password
+  shell: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+  become_user: ubuntu
+  register: argocd_password
+  retries: 5
+  delay: 10
+  until: argocd_password.rc == 0
+
+- name: Save Argo CD admin password to local file
+  local_action:
+    module: copy
+    content: |
+      Argo CD Admin Credentials
+      =========================
+      URL: https://{{ ansible_host }}:30008
+      Username: admin
+      Password: {{ argocd_password.stdout }}
+      
+      Note: Accept the self-signed certificate warning in your browser.
+    dest: "{{ playbook_dir }}/../.argocd-credentials"
+  become: no
+
+- name: Display Argo CD access information
+  debug:
+    msg:
+      - "Argo CD has been installed successfully!"
+      - "Access URL: https://{{ ansible_host }}:30008"
+      - "Username: admin"
+      - "Password: {{ argocd_password.stdout }}"
+      - "Credentials saved to: {{ playbook_dir }}/../.argocd-credentials"
+
+- name: Install Argo CD CLI
+  get_url:
+    url: https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+    dest: /usr/local/bin/argocd
+    mode: '0755'
+
+- name: Add argocd CLI completion for ubuntu user
+  lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: 'source <(argocd completion bash)'
+    state: present

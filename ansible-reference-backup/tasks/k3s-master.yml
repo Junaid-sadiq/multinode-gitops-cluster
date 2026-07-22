@@ -1,0 +1,76 @@
+---
+# k3s Master Node Setup
+- name: Check if k3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_installed
+
+- name: Install k3s on master node
+  shell: |
+    curl -sfL https://get.k3s.io | sh -s - server \
+      --bind-address=192.168.1.10 \
+      --advertise-address=192.168.1.10 \
+      --node-ip=192.168.1.10 \
+      --flannel-iface=eth0 \
+      --write-kubeconfig-mode=644
+  when: not k3s_installed.stat.exists
+
+- name: Wait for k3s to be ready
+  wait_for:
+    path: /etc/rancher/k3s/k3s.yaml
+    timeout: 120
+
+- name: Get k3s node token
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token
+
+- name: Save k3s token to local file
+  local_action:
+    module: copy
+    content: "{{ k3s_token.content | b64decode }}"
+    dest: "{{ playbook_dir }}/../.k3s-token"
+  become: no
+
+- name: Copy kubeconfig to ubuntu user
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /home/ubuntu/.kube/config
+    remote_src: yes
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+
+- name: Create .kube directory for ubuntu user
+  file:
+    path: /home/ubuntu/.kube
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Update kubeconfig server address
+  replace:
+    path: /home/ubuntu/.kube/config
+    regexp: 'https://127.0.0.1:6443'
+    replace: 'https://192.168.1.10:6443'
+
+- name: Install kubectl completion for bash
+  lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: 'source <(kubectl completion bash)'
+    state: present
+
+- name: Set KUBECONFIG environment variable
+  lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: 'export KUBECONFIG=/home/ubuntu/.kube/config'
+    state: present
+
+- name: Wait for all k3s pods to be ready
+  shell: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
+  become_user: ubuntu
+  retries: 5
+  delay: 10
+  register: result
+  until: result.rc == 0

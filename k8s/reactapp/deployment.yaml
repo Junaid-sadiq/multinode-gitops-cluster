@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reactapp-ui
+  namespace: reactapp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: reactapp-ui
+  template:
+    metadata:
+      labels:
+        app: reactapp-ui
+    spec:
+      containers:
+      - name: reactapp-ui
+        image: ghcr.io/junaid-sadiq/multinode-gitops-cluster/reactapp:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
