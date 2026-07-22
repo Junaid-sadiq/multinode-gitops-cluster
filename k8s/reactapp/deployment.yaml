@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: reactapp-ui
-        image: ghcr.io/junaid-sadiq/multinode-gitops-cluster/reactapp:sha-869bc7993fd23ebf74554eb462ff91234c20abd6
+        image: ghcr.io/junaid-sadiq/multinode-gitops-cluster/reactapp:sha-fc831b9782b1d9f0b476c8074159823e7fcc58bf
         ports:
         - containerPort: 80
         resources:
