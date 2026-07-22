@@ -44,7 +44,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,format=long
+            type=sha,format=long,prefix=sha-
             type=raw,value=latest
             
       - name: Build and push Docker image
@@ -62,8 +62,8 @@ jobs:
           
       - name: Update Kubernetes deployment manifest
         run: |
-          # Extract the SHA tag
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          # Use the SHA tag for deployment
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
           
           echo "Updating deployment.yaml with image: $IMAGE_TAG"
           
@@ -94,12 +94,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **Status**: Build Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags**: " >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sha-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`latest\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
