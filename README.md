@@ -29,6 +29,8 @@ Production-ready Kubernetes on CSC cPouta with CI/CD GitOps pipeline using ArgoC
 
 ## 🏗️ Architecture
 
+### System Overview
+
 ```
 Internet → Floating IP (86.50.229.25:30007) → Security Group → K8s Cluster
   ├─ k8s-master (192.168.1.10) - Control Plane + ArgoCD
@@ -39,6 +41,86 @@ Internet → Floating IP (86.50.229.25:30007) → Security Group → K8s Cluster
 
 **Network**: Private 192.168.1.0/24, public IP on master, NodePort 30007  
 **Security**: Public SG (SSH/HTTP/HTTPS/6443/30007), Internal SG (full subnet access)
+
+### Detailed Architecture Diagram
+
+```mermaid
+graph TD
+    classDef git fill:#F05032,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef github fill:#181717,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef generic fill:#444,stroke:#fff,stroke-width:1px,color:#fff;
+    classDef docker fill:#2496ED,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef k8s fill:#326CE5,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef argo fill:#EF7B4D,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef user fill:#222,stroke:#fff,stroke-width:1px,color:#fff;
+
+    subgraph DevSpace ["1. Developer Workspace"]
+        Coder((Developer)):::user
+    end
+
+    subgraph GitHub ["2. Source Control & CI"]
+        RepoFront[reactapp/ Source<br/>React + Vite + Tailwind]:::github
+        ActionCI[GitHub Actions CI<br/>Build & Push Workflow]:::github
+        RepoManifests[k8s/ Manifests<br/>Deployment + Service + HPA]:::github
+        GHCR(GitHub Container Registry<br/>GHCR.io):::docker
+    end
+
+    subgraph K8sCluster ["3. CSC Pouta Kubernetes Cluster"]
+        direction TB
+
+        subgraph K8sControl [Control Plane]
+            ArgoCD[Argo CD<br/>GitOps Controller]:::argo
+        end
+
+        subgraph K8sWorkers [Worker Nodes]
+            subgraph ReactAppNS [reactapp Namespace]
+                direction LR
+                AppService[React App Service<br/>NodePort 30007]:::k8s
+                IngressRes[Ingress Resource<br/>reactapp-ui]:::k8s
+                HPA[HPA<br/>Autoscaler 3-10]:::k8s
+                Pod1[Pod 1]:::k8s
+                Pod2[Pod 2]:::k8s
+                Pod3[Pod 3]:::k8s
+            end
+        end
+
+        K8sNet(Kubernetes Networking / Kube-Proxy):::k8s
+    end
+
+    subgraph External ["4. External Access"]
+        Visitor((End User)):::user
+        CPoutaSG(cPouta Security Group<br/>k8s-public-secgroup):::generic
+    end
+
+    %% CI Flow
+    Coder -- "1. git push" --> RepoFront
+    RepoFront -- "Triggers" --> ActionCI
+    ActionCI -- "2. Build + Scan + Push Image" --> GHCR
+    ActionCI -- "3. Commit New SHA Tag" --> RepoManifests
+
+    %% CD Flow (GitOps)
+    ArgoCD -- "4. Auto-Sync Poll (3min)" --> RepoManifests
+    ArgoCD -- "5. Apply Manifests" --> ReactAppNS
+    Pod1 & Pod2 & Pod3 -- "6. Pull Image (Always)" --> GHCR
+
+    %% Scale Flow
+    HPA -. "Monitors & Scales" .-> Pod1 & Pod2 & Pod3
+
+    %% User Flow
+    Visitor -- "http://86.50.229.25:30007" --> CPoutaSG
+    CPoutaSG -- "Allow Port 30007" --> K8sNet
+    K8sNet --> AppService
+    AppService -- "Load Balances" --> Pod1 & Pod2 & Pod3
+```
+
+**Workflow Explanation:**
+1. **Developer** pushes code to `reactapp/` directory
+2. **GitHub Actions** builds Docker image, scans with Trivy, pushes to GHCR
+3. **Workflow** updates `k8s/reactapp/deployment.yaml` with new image SHA
+4. **ArgoCD** detects manifest change via polling (every 3 minutes)
+5. **ArgoCD** syncs changes to cluster using `kubectl apply`
+6. **Kubernetes** performs rolling update with zero downtime
+7. **End User** accesses application via floating IP and NodePort
 
 ---
 
