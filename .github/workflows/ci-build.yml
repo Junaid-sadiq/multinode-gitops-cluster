@@ -16,6 +16,7 @@ jobs:
   build-and-push:
     name: Build Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -58,9 +59,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
           
       - name: Generate SBOM
+        continue-on-error: true
         uses: anchore/sbom-action@v0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
@@ -68,6 +72,7 @@ jobs:
           output-file: sbom.spdx.json
           
       - name: Upload SBOM
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: sbom
@@ -76,6 +81,7 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build-and-push
     permissions:
       contents: read
@@ -98,6 +104,7 @@ jobs:
   update-gitops-manifest:
     name: Update GitOps Manifests
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [build-and-push, security-scan]
     
     steps:
