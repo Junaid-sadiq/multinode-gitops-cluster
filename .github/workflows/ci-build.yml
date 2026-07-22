@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/reactapp
+  IMAGE_NAME: ${{ github.repository_owner }}/multinode-gitops-cluster/reactapp
 
 jobs:
   build-and-push:
@@ -24,11 +24,20 @@ jobs:
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
       image-digest: ${{ steps.build.outputs.digest }}
-      image-sha-tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+      image-sha-tag: ${{ steps.repo.outputs.image_name }}:sha-${{ github.sha }}
+      owner_lc: ${{ steps.repo.outputs.owner_lc }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Convert repository owner to lowercase
+        id: repo
+        run: |
+          echo "owner_lc=${OWNER,,}" >> $GITHUB_OUTPUT
+          echo "image_name=ghcr.io/${OWNER,,}/multinode-gitops-cluster/reactapp" >> $GITHUB_OUTPUT
+        env:
+          OWNER: ${{ github.repository_owner }}
         
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -44,7 +53,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.repo.outputs.image_name }}
           tags: |
             type=sha,format=long,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
@@ -68,7 +77,7 @@ jobs:
         continue-on-error: true
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image: ${{ steps.repo.outputs.image_name }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: sbom.spdx.json
           
@@ -94,7 +103,7 @@ jobs:
         continue-on-error: true  # Continue even if vulnerabilities found
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          image-ref: ghcr.io/${{ needs.build-and-push.outputs.owner_lc }}/multinode-gitops-cluster/reactapp:sha-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -124,8 +133,9 @@ jobs:
           
       - name: Update Kubernetes manifests
         run: |
-          # Use the SHA tag directly
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
+          # Convert repository owner to lowercase
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="ghcr.io/${OWNER_LC}/multinode-gitops-cluster/reactapp:sha-${{ github.sha }}"
           
           echo "Updating deployment.yaml with image: ${IMAGE_TAG}"
           
@@ -163,9 +173,12 @@ jobs:
     steps:
       - name: Create deployment summary
         run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME="ghcr.io/${OWNER_LC}/multinode-gitops-cluster/reactapp:sha-${{ github.sha }}"
+          
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image**: \`${IMAGE_NAME}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
